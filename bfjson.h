@@ -4,6 +4,7 @@
 // C++ Brute Force JSON Library
 // Copyright (C) 2022 penguin2233 (penguin2233.gq)
 
+// Version 20231225 - whitespace checking
 // Version 20231217 - fixes for json from webnovels (better handle string type in compact json)
 
 #include <string>
@@ -42,11 +43,17 @@ namespace bfjson
 			locEnd = json.find('}', loc);
 			if (locEnd == std::string::npos) {
 				return ""; // invalid json
+			} else { // further check whitespace
+				if (json[locEnd - 1] == ' ') {
+					while (true) { if (json[locEnd - 1] == ' ') locEnd--; else break; }
+					locEnd--;
+				}
 			}
 		}
-		if (compact) 
-			ret = json.substr(loc + element.size() + 4, locEnd - (loc + element.size() + 4));
-		else ret = json.substr(loc + element.size() + 3, locEnd - (loc + element.size() + 3));
+		/*if (compact) ret = json.substr(loc + element.size() + 4, locEnd - (loc + element.size() + 4));
+		else ret = json.substr(loc + element.size() + 3, locEnd - (loc + element.size() + 3));*/
+		if (compact) ret = json.substr(loc + element.size() + 3, locEnd - (loc + element.size() + 2));
+		else ret = json.substr(loc + element.size() + 4, locEnd - (loc + element.size() + 4));
 		if (ret[0] == '\"' && removeQuotes) {
 			ret = ret.substr(1, ret.size() - 2);
 		}

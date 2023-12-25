@@ -41,7 +41,8 @@ int epubroll(std::string bookname_e, std::vector<chapterInfo> chapters) {
 	// zip_source_t* indexhtml_zf = zip_source_file(epubzip_f, "index.html", 0, -1);
 	// zip_file_add(epubzip_f, "index.html", indexhtml_zf, ZIP_FL_ENC_UTF_8);
 	for (size_t i = 0; i < chapters.size(); i++) {
-		zip_source_t* html_zf = zip_source_file(epubzip_f, chapters[i].filename.c_str(), 0, -1);
+		// zip_source_t* html_zf = zip_source_file(epubzip_f, chapters[i].filename.c_str(), 0, -1);
+		zip_source_t* html_zf = zip_source_buffer(epubzip_f, chapters[i].html.c_str(), chapters[i].html.size(), 0);
 		zip_file_add(epubzip_f, chapters[i].filename.c_str(), html_zf, ZIP_FL_ENC_UTF_8);
 	}
 
@@ -67,6 +68,7 @@ int epubroll(std::string bookname_e, std::vector<chapterInfo> chapters) {
 
 int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	// this function use epub structure and metadata from wikipedia and calibre
+	// cover.jpg hardcoded, see epub_strings.h
 	// mimetype
 	std::ofstream mimetype("mimetype");
 	mimetype << "application/epub+zip";
@@ -165,15 +167,16 @@ int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	tocncx_f.close();
 	
 	// titlepage.xhtml
+	std::string titlepagexhtml = epubtitlepagexhtml;
+	titlepagexhtml.insert(653, book.cv_height);
+	titlepagexhtml.insert(643, book.cv_width);
+	titlepagexhtml.insert(583, book.cv_height);
+	titlepagexhtml.insert(582, book.cv_width);
 	std::ofstream titlepagexhtml_f("titlepage.xhtml");
-	titlepagexhtml_f << epubtitlepagexhtml;
+	titlepagexhtml_f << titlepagexhtml;
 	titlepagexhtml_f.close();
 
 	return 0;
-}
-
-void epubcover(std::string html) {
-	return;
 }
 
 void epubcss() {
@@ -196,30 +199,26 @@ std::string htmlbodyescape(std::string in) {
 	return p;
 }
 
-void epubhtml(std::vector<std::string> txts, std::string headertitle, std::string htmlfilename, std::string title) {
-	// this function use html from calibre
-	std::vector<std::string> lines = txts;
+std::string epubhtml(bookInfo book, chapterInfo chapter) {
+	// std::vector<std::string> txts, std::string headertitle, std::string htmlfilename, std::string title
+	// this function use html from calibr
 	// html
 	std::string html = "<?xml version='1.0' encoding='utf-8'?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<title></title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"stylesheet.css\"/>\n</head>\n<body>\n";
-	html.insert(97, htmlbodyescape(title));
-	int br = 0;
+	html.insert(97, htmlbodyescape(book.name));
 	// h1
-	html.append("<h1>" + htmlbodyescape(headertitle) + "</h1>\n");
+	html.append("<h1>" + htmlbodyescape(chapter.name) + "</h1>\n");
 	// p
-	for (size_t i = 0; i < lines.size(); i++) {
-		if (lines[i] != "") {
+	int br = 0;
+	for (size_t i = 0; i < chapter.lines.size(); i++) {
+		if (chapter.lines[i] != "") {
 			if (br > 3) { // 4 newline = 1 pagebreak
-				html.append("<p class=\"scenebreak\">" + htmlbodyescape(lines[i]) + "</p>\n");
+				html.append("<p class=\"scenebreak\">" + htmlbodyescape(chapter.lines[i]) + "</p>\n");
 				br = 0;
 			}
-			else { html.append("<p>" + htmlbodyescape(lines[i]) + "</p>\n"); br = 0; }
+			else { html.append("<p>" + htmlbodyescape(chapter.lines[i]) + "</p>\n"); br = 0; }
 		}
 		else br++;
 	}
 	html.append("\n</body>\n</html>\n");
-
-	std::ofstream html_f(htmlfilename);
-	html_f << html;
-	html_f.close();
-	return;
+	return html;
 }

@@ -28,84 +28,44 @@ std::string escape(std::string in) {
 }
 
 int main(int argc, char* argv[]) {
-	std::string f = "input.html";
-	if (argc < 2 || argc > 3) {
+	if (argc != 2) {
 		std::cout << "usage: wn-epuber <url to webnovel read page>\n";
-		std::cout << "OR: wn-epuber -f <path to html file>\n";
 		return 0;
 	}
-	else if (argc == 2) {
-		std::cout << "downloading  " << argv[1] << '\n';
-		std::string url = argv[1];
-		std::string h = "";
-		if (http_get(argv[1], &h) == -1) return -1;
-		std::ofstream hf("input.html");
-		hf << h;
-		hf.close();
-	}
-	else if (argc == 3) {
-		if (strcmp("-f", argv[1]) != 0) { std::cout << "bad usage\n"; return 0; }
-		std::cout << "opening file " << argv[2] << '\n';
-		f = argv[2];
-	}
 
+	std::cout << "Downloading " << argv[1] << '\n';
+	std::string url = argv[1];
+	std::string html = "";
+	if (http_get(url, &html) != 0) return -1;
+
+	// parse book
+	int counter = 0;
+	bookInfo book;
 	std::vector<chapterInfo> chapters;
 top:
-	std::ifstream inputf(f);
-	std::string html = "";
-	while (inputf.good()) {
-		std::string buf = "";
-		std::getline(inputf, buf);
-		html.append(buf);
-	}
-	inputf.close();
-
-	// enum chapters
-	//size_t bcl_begin = html.find("\"@type\": \"BreadcrumbList\",");
-	//size_t bcl_end = html.find(']', bcl_begin);
-	//std::string breadcrumblist_s = html.substr(bcl_begin, bcl_end - bcl_begin);
-	//std::vector<std::string> chapters_r = bfjson::parseArrayOfUnnamedObjects(breadcrumblist_s);
-	//std::string genre = bfjson::findSingleElement(chapters_r[0], "name", true);
-	//std::vector<chapter> chapters;
-	//for (size_t i = 2; i < chapters_r.size(); i++) { // ignore index0, that is the genre, ignore index1, that is foobar
-	//	chapter h;
-	//	h.name = bfjson::findSingleElement(chapters_r[i], "name", true);
-	//	h.url = bfjson::findSingleElement(chapters_r[i], "item", true);
-	//	chapters.push_back(h);
-	//}
-
-	// chapInfo
+	// chapInfo (loop)
 	size_t json_begin = html.find("var chapInfo=") + 14;
 	size_t json_end_rough = html.find(",\"isAuth\":", json_begin);
 	std::string json = html.substr(json_begin, json_end_rough - json_begin);
 	size_t json_end = json.find_last_of('}') + 1;
 	json = json.substr(0, json_end);
 	json.push_back(']'); json.push_back('}'); json.push_back('}');
-	// book info
-	std::string bkInfo = bfjson::findSingleJSONObject(json, "bookInfo");
+	// bookInfo
+	if (counter == 0) {
+		std::string bkInfo = bfjson::findSingleJSONObject(json, "bookInfo");
+		book = {
+			unescape(bfjson::findSingleElement(bkInfo, "bookName")),
+			bfjson::findSingleElement(bkInfo, "bookId"),
+			unescape(bfjson::findSingleElement(bkInfo, "authorName")),
+			bfjson::findSingleElement(bkInfo, "languageName"),
+			bfjson::findSingleElement(bkInfo, "categoryName")
+		};
+	}
+	// chapterInfo
 	std::string chapInfo = bfjson::findSingleJSONObject(json, "chapterInfo");
-	std::string bookId = unescape(bfjson::findSingleElement(bkInfo, "bookId"));
-	std::string bookname = unescape(bfjson::findSingleElement(bkInfo, "bookName"));
-	std::string author = unescape(bfjson::findSingleElement(bkInfo, "authorName"));
-	std::string language = bfjson::findSingleElement(bkInfo, "languageName");
-	std::string genre = bfjson::findSingleElement(bkInfo, "categoryName");
 	// current chapter
 	std::string curChapterId = bfjson::findSingleElement(chapInfo, "chapterId");
 	std::string curChapterName = unescape(bfjson::findSingleElement(chapInfo, "chapterName"));
-	// next chapter
-	std::string nextChapterUrl = "";
-	std::string nextChapterId = bfjson::findSingleElement(chapInfo, "nextChapterId");
-	std::string nextChapterName = unescape(bfjson::findSingleElement(chapInfo, "nextChapterName"));
-	if (nextChapterId != "-1") {
-		// https://www.webnovel.com/book/a-mistake-i-made-got-me-a-girlfriend-(girlxgirl)_14108808705366405/chapter-1-next-morning_39190231278213964
-		std::stringstream nextUrl_ss;
-		nextUrl_ss << "https://www.webnovel.com/book/" << escape(bookname) << '_' << bookId << '/' << escape(nextChapterName) << '_' << nextChapterId;
-		nextChapterUrl = nextUrl_ss.str();
-	}
-	bookInfo book = { bookname, bookId, author, language, genre };
-	chapterInfo chapter = { curChapterName, curChapterId, curChapterId + ".html" };
-	chapters.push_back(chapter);
-
 	std::string contents_s = bfjson::findSingleArray(json, "contents");
 	std::vector<std::string> contents = bfjson::parseArrayOfUnnamedObjects(contents_s);
 	std::vector<std::string> lines;
@@ -114,38 +74,43 @@ top:
 		// std::cout << text << '\n';
 		lines.push_back(text);
 	}
-
-	epubhtml(lines, curChapterName, curChapterId + ".html", bookname);
-
-	std::string txtfilename = escape(bookname) + '-'  + escape(curChapterName) + ".txt";
-	std::ofstream outputf(txtfilename);
-	for (size_t i = 0; i < lines.size(); i++) {
-		outputf << lines[i] << '\n';
-	}
-	outputf.close();
-
+	chapterInfo curChapter = { unescape(curChapterName), curChapterId, unescape(curChapterId) + ".html", lines };
+	curChapter.html = epubhtml(book, curChapter);
+	chapters.push_back(curChapter); counter++;
+	// next chapter
+	std::string nextChapterId = bfjson::findSingleElement(chapInfo, "nextChapterId");
 	if (nextChapterId != "-1") {
-		std::cout << "downloading  " << nextChapterUrl << '\n';
-		std::string h;
-		if (http_get(nextChapterUrl, &h) == -1) return -1;
-		std::ofstream hf("input.html");
-		hf << h;
-		hf.close();
+		std::string nextChapterName = unescape(bfjson::findSingleElement(chapInfo, "nextChapterName"));
+		// https://www.webnovel.com/book/a-mistake-i-made-got-me-a-girlfriend-(girlxgirl)_14108808705366405/chapter-1-next-morning_39190231278213964
+		std::string nextUrl = "https://www.webnovel.com/book/" + escape(book.name) + '_' + book.id + '/' + escape(nextChapterName) + '_' + nextChapterId;
+		std::cout << "Downloading " << nextUrl << '\n';
+		html.clear();
+		if (http_get(nextUrl, &html) != 0) return -1;
 		goto top;
-	}
+	} // else == done
 
 	// download cover
+	std::cout << "\nDownloading cover.\n";
 	std::vector<unsigned char> cover_raw;
 	// https://book-pic.webnovel.com/bookcover/13911677005221505
-	http_get("book-pic.webnovel.com/bookcover/" + book.id, &cover_raw);
+	std::string cover_url = "book-pic.webnovel.com/bookcover/" + book.id;
+	http_get(cover_url, &cover_raw);
 	std::ofstream cover_f("cover.jpg", std::ios::binary);
 	cover_f.write((char*)&cover_raw[0], cover_raw.size());
 	cover_f.close();
-	
+	// find cover image dimensions
+	size_t im_loc = html.find(cover_url) - 71;
+	std::string im_json = html.substr(im_loc, html.find("}", im_loc) - im_loc + 1);
+	book.cv_height = bfjson::findSingleElement(im_json, "height");
+	book.cv_width = bfjson::findSingleElement(im_json, "width");
+
+	std::cout << "Parsed " << counter << " chapters.\nCreating EPUB...\n";
+
 	epubcss();
-	// epubhtml(lines, curChapterName, curChapterId + ".html", bookname);
 	epubmeta(book, chapters);
-	epubroll(escape(bookname), chapters);
+	epubroll(escape(book.name), chapters);
+
+	std::cout << "Finished.\n";
 
 	return 0;
 }

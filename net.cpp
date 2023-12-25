@@ -40,9 +40,7 @@ int http_get(std::string url, std::vector<unsigned char>* out) { // bin mode
 	request_stream << "User-Agent: Mozilla/5.0 (Windows NT 10.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36 \r\n";
 	request_stream << "Host: " << host << " \r\n";
 	request_stream << "\r\n";
-	try {
-		boost::asio::write(httpsocket, request);
-	}
+	try { boost::asio::write(httpsocket, request); }
 	catch (boost::system::system_error& e) {
 		std::cout << "Exception thrown trying to write to socket (http). " << boost::diagnostic_information(e) << '\n';
 		return -1;
@@ -58,7 +56,7 @@ int http_get(std::string url, std::vector<unsigned char>* out) { // bin mode
 		std::cout << "Exception thrown trying to read from socket. " << boost::diagnostic_information(e) << '\n';
 		return -1;
 	}
-	for (size_t i = 0; i < buf.size(); i++) { buf_s.push_back(buf[i]); }
+	buf_s = std::string((char*)&buf[0]);
 	size_t loc = buf_s.find("\r\n\r\n");
 	std::string header = buf_s.substr(0, loc + 4);
 	if (header.find("HTTP/1.1 200 OK\r\n") == std::string::npos) {
@@ -109,10 +107,11 @@ int http_get(std::string url, std::vector<unsigned char>* out) { // bin mode
 			size_t chunk;
 			std::stringstream h;
 			h << std::hex << buf_s.substr(0, loc); h >> chunk; // hexdecimal
-			for (size_t i = 0; i < chunk; i++) { ret.push_back(buf[i]); }
+			// for (size_t i = 0; i < chunk; i++) { ret.push_back(buf[i]); }
+			ret.insert(ret.end(), buf.begin(), buf.begin() + chunk);
 			buf.erase(buf.begin(), buf.begin() + loc + 2 + chunk );
 			buf_s.clear();
-			for (size_t i = 0; i < buf.size(); i++) { buf_s.push_back(buf[i]); }
+			buf_s = std::string((char*)&buf[0]);
 		}
 	} 
 	else if (contentLength != 0) { 
@@ -122,23 +121,22 @@ int http_get(std::string url, std::vector<unsigned char>* out) { // bin mode
 			std::cout << "Exception thrown trying to read from socket. " << boost::diagnostic_information(e) << '\n';
 			return -1;
 		}
-		for (size_t i = 0; i < buf.size(); i++) { ret.push_back(buf[i]); }
+		ret.insert(ret.end(), buf.begin(), buf.end());
 	}
 	else { // assume all data has been read to buffer
-		for (size_t i = 0; i < buf.size(); i++) { ret.push_back(buf[i]); }
+		ret = buf;
 	}
 	*out = ret;
 	return 0;
 }
 
 int http_get(std::string url, std::string* out) { // str mode
-	std::string o = "";
 	std::vector<unsigned char> h;
 	int ret = http_get(url, &h);
 	if (ret != 0) return ret;
-	for (size_t i = 0; i < h.size(); i++) {
+	/*for (size_t i = 0; i < h.size(); i++) {
 		o.push_back(h[i]);
-	}
-	*out = o;
+	}*/
+	*out = std::string((char*)&h[0]); // faster!
 	return ret;
 }
