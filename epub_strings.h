@@ -121,3 +121,4 @@ static const char* epubnavpoint =
 	"      <content src=\"\"/>\n"
 	"    </navPoint>\n"
 	"";
+static const char* epubmimetype = "application/epub+zip";

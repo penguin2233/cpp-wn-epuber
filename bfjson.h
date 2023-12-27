@@ -70,7 +70,11 @@ namespace bfjson
 				size_t loc2 = loc + 1 + element.size() + 1 + 1;
 				if (json[loc2] != '[') {
 					if (json[loc2 + 1] == '[') loc2 = loc2 + 1;
-					else continue; // not an array, keep searching
+					else {
+						static size_t loc_st = std::string::npos;
+						if (loc_st == loc) return ""; // don't inf loop
+						else { loc_st = loc; continue; } // not an array, keep searching
+					}
 				}
 				size_t openSqCt = 0, lastSqOp = 0, closeSqCt = 0, lastSqCloseLoc = 0;
 				for (size_t i = loc2 + 1; i < json.size(); i++) {

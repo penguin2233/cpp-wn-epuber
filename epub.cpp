@@ -8,83 +8,107 @@
 #include <zip.h>
 
 #ifdef _WIN32
-#include <direct.h>
 #include <Windows.h>
 #endif
 
 #include "epub_strings.h"
 #include "epub.h"
 
-int epubroll(std::string bookname_e, std::vector<chapterInfo> chapters) {
-	// roll zip
+std::string htmlbodyescape(std::string in) { // need to do this better
+	std::string p = in;
+	size_t h = 0;
+	h = p.find("&", h);
+	while (h != std::string::npos) {
+		p.insert(h + 1, "amp;");
+		h++;
+		h = p.find("&", h);
+	} h = 0;
+	h = p.find("<", h);
+	while (h != std::string::npos) {
+		p.erase(h, 1);
+		p.insert(h, "&lt;");
+		h = p.find("<", h);
+	} h = 0;
+	h = p.find(">", h);
+	while (h != std::string::npos) {
+		p.erase(h, 1);
+		p.insert(h, "&gt;");
+		h = p.find(">", h);
+	} // h = 0;
+	return p;
+}
+
+zip_t* epubzip_f;
+
+int epubcreate(const char* zipfilename) {
 	int err = 0;
-	std::string zipfilename = bookname_e + ".epub";
-	zip_t* epubzip_f = zip_open(zipfilename.c_str(), ZIP_CREATE | ZIP_TRUNCATE, &err);
+	epubzip_f = zip_open(zipfilename, ZIP_CREATE | ZIP_TRUNCATE, &err);
 	if (epubzip_f == NULL) {
 		zip_error_t ziperr;
-		zip_error_init_with_code(&ziperr, err);
+		zip_get_error(epubzip_f);
 		std::cout << "create zip fail " << zip_error_strerror(&ziperr) << '\n';
 		return -1;
-	}
+	} return 0;
+}
 
-	zip_source_t* mimetype_zf = zip_source_file(epubzip_f, "mimetype", 0, -1);
-	zip_file_add(epubzip_f, "mimetype", mimetype_zf, ZIP_FL_ENC_UTF_8);
-	zip_set_file_compression(epubzip_f, 0, ZIP_CM_STORE, 0);
-	zip_dir_add(epubzip_f, "META-INF", ZIP_FL_ENC_UTF_8);
-#ifdef _WIN32
-	zip_source_t* containerxml_zf = zip_source_file(epubzip_f, "META-INF\\container.xml", 0, -1);
-#else
-	zip_source_t* containerxml_zf = zip_source_file(epubzip_f, "META-INF/container.xml", 0, -1);
-#endif
-	zip_file_add(epubzip_f, "META-INF/container.xml", containerxml_zf, ZIP_FL_ENC_UTF_8);
-
-	// zip_source_t* indexhtml_zf = zip_source_file(epubzip_f, "index.html", 0, -1);
-	// zip_file_add(epubzip_f, "index.html", indexhtml_zf, ZIP_FL_ENC_UTF_8);
-	for (size_t i = 0; i < chapters.size(); i++) {
-		// zip_source_t* html_zf = zip_source_file(epubzip_f, chapters[i].filename.c_str(), 0, -1);
-		zip_source_t* html_zf = zip_source_buffer(epubzip_f, chapters[i].html.c_str(), chapters[i].html.size(), 0);
-		zip_file_add(epubzip_f, chapters[i].filename.c_str(), html_zf, ZIP_FL_ENC_UTF_8);
-	}
-
-	zip_source_t* contentopf_zf = zip_source_file(epubzip_f, "content.opf", 0, -1);
-	zip_file_add(epubzip_f, "content.opf", contentopf_zf, ZIP_FL_ENC_UTF_8);
-	zip_source_t* titlepagexhtml_zf = zip_source_file(epubzip_f, "titlepage.xhtml", 0, -1);
-	zip_file_add(epubzip_f, "titlepage.xhtml", titlepagexhtml_zf, ZIP_FL_ENC_UTF_8);
-	zip_source_t* tocncx_zf = zip_source_file(epubzip_f, "toc.ncx", 0, -1);
-	zip_file_add(epubzip_f, "toc.ncx", tocncx_zf, ZIP_FL_ENC_UTF_8);
-	zip_source_t* stylesheetcss_zf = zip_source_file(epubzip_f, "stylesheet.css", 0, -1);
-	zip_file_add(epubzip_f, "stylesheet.css", stylesheetcss_zf, ZIP_FL_ENC_UTF_8);
-	zip_source_t* coverjpg_zf = zip_source_file(epubzip_f, "cover.jpg", 0, -1);
-	zip_file_add(epubzip_f, "cover.jpg", coverjpg_zf, ZIP_FL_ENC_UTF_8);
-
-	err = zip_close(epubzip_f);
-	if (err != 0) {
-		zip_error_t* ziperr = zip_get_error(epubzip_f);
-		std::cout << "write zip fail " << zip_error_strerror(ziperr) << '\n';
+int epubdir(const char* dirname) {
+	if (epubzip_f == NULL) { std::cout << "zip file not open.\n"; return -1; }
+	zip_int64_t err = zip_dir_add(epubzip_f, "META-INF", ZIP_FL_ENC_UTF_8);
+	if (err == -1) {
+		zip_error_t ziperr;
+		zip_get_error(epubzip_f);
+		std::cout << "create dir in zip fail " << zip_error_strerror(&ziperr) << '\n';
 		return -1;
 	}
 	return 0;
 }
 
-int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
+int epubadd(const char* filename, const char* data, bool compression = true, int sz = 0) {
+	if (epubzip_f == NULL) { std::cout << "zip file not open.\n"; return -1; }
+	if (sz == 0) sz = strlen(data);
+	zip_source_t* zf = zip_source_buffer(epubzip_f, data, sz, 0);
+	zip_int64_t index = zip_file_add(epubzip_f, filename, zf, ZIP_FL_ENC_UTF_8);
+	if (index == -1) {
+		zip_error_t ziperr;
+		zip_get_error(epubzip_f);
+		std::cout << "add file to zip fail " << zip_error_strerror(&ziperr) << '\n';
+		return -1;
+	}
+	if (!compression) zip_set_file_compression(epubzip_f, index, ZIP_CM_STORE, 0);
+	return 0;
+}
+
+int epubwrite() {
+	int err = zip_close(epubzip_f);
+	if (err != 0) {
+		zip_error_t* ziperr = zip_get_error(epubzip_f);
+		std::cout << "write zip fail " << zip_error_strerror(ziperr) << '\n';
+		return -1;
+	} return 0;
+}
+
+int epubroll(std::string bookname_e, std::vector<chapterInfo> chapters, std::vector<unsigned char> cover_raw, epubmetadata epub_metadata) {
+	// roll zip
+	std::string zipfilename = bookname_e + ".epub";
+	epubcreate(zipfilename.c_str());
+	epubadd("mimetype", epubmimetype, false);
+	epubdir("META-INF");
+	epubadd("META-INF/container.xml", epubcontainerxml);
+	epubadd("stylesheet.css", epubstylesheetcss);
+	for (size_t i = 0; i < chapters.size(); i++) {
+		epubadd(chapters[i].filename.c_str(), chapters[i].html.c_str());
+	}
+	epubadd("content.opf", epub_metadata.contentopf.c_str());
+	epubadd("titlepage.xhtml", epub_metadata.titlepagexhtml.c_str());
+	epubadd("toc.ncx", epub_metadata.tocncx.c_str());
+	epubadd("cover.jpg", (char*)&cover_raw[0], true, cover_raw.size());
+
+	epubwrite();
+	return 0;
+}
+
+epubmetadata epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	// this function use epub structure and metadata from wikipedia and calibre
-	// cover.jpg hardcoded, see epub_strings.h
-	// mimetype
-	std::ofstream mimetype("mimetype");
-	mimetype << "application/epub+zip";
-	mimetype.close();
-
-	// META-INF/container.xml
-#ifdef _WIN32
-	_mkdir("META-INF");
-	std::ofstream containerxml("META-INF\\container.xml");
-#else 
-	mkdir("META-INF", 0755);
-	std::ofstream containerxml("META-INF/container.xml");
-#endif
-	containerxml << epubcontainerxml;
-	containerxml.close();
-
 	// content.opf
 	std::string contentopf = epubcontentopf;
 	// spine
@@ -138,10 +162,6 @@ int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	contentopf.insert(365, book.language);
 	// title
 	contentopf.insert(336, book.name);
-	// write out
-	std::ofstream contentopf_f("content.opf");
-	contentopf_f << contentopf;
-	contentopf_f.close();
 
 	// toc.ncx
 	// navMap
@@ -153,7 +173,7 @@ int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 		navpoint_index_ss << 2 + i; // start from playorder 2, 1 is cover
 		std::string navpoint_index = navpoint_index_ss.str();
 		navpoint.insert(111, chapters[i].filename);
-		navpoint.insert(65, chapters[i].name);
+		navpoint.insert(65, htmlbodyescape(chapters[i].name));
 		navpoint.insert(31, navpoint_index);
 		navpoint.insert(18, "ch" + navpoint_index);
 		navLabels.append(navpoint);
@@ -162,9 +182,6 @@ int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	tocncx.insert(386, book.name);
 	tocncx.insert(250, bkpstring);
 	tocncx.insert(165, uuidstr);
-	std::ofstream tocncx_f("toc.ncx");
-	tocncx_f << tocncx;
-	tocncx_f.close();
 	
 	// titlepage.xhtml
 	std::string titlepagexhtml = epubtitlepagexhtml;
@@ -172,36 +189,12 @@ int epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	titlepagexhtml.insert(643, book.cv_width);
 	titlepagexhtml.insert(583, book.cv_height);
 	titlepagexhtml.insert(582, book.cv_width);
-	std::ofstream titlepagexhtml_f("titlepage.xhtml");
-	titlepagexhtml_f << titlepagexhtml;
-	titlepagexhtml_f.close();
 
-	return 0;
-}
-
-void epubcss() {
-	// this function use css from calibre
-	std::ofstream stylesheetcss("stylesheet.css");
-	stylesheetcss << epubstylesheetcss;
-	stylesheetcss.close();
-	return;
-}
-
-std::string htmlbodyescape(std::string in) {
-	std::string p = in;
-	size_t h = 0;
-	h = p.find("&", h);
-	while (h != std::string::npos) {
-		p.insert(h + 1, "amp;");
-		h++;
-		h = p.find("&", h);
-	}
-	return p;
+	return epubmetadata{ contentopf, tocncx, titlepagexhtml };
 }
 
 std::string epubhtml(bookInfo book, chapterInfo chapter) {
-	// std::vector<std::string> txts, std::string headertitle, std::string htmlfilename, std::string title
-	// this function use html from calibr
+	// this function use html from calibre
 	// html
 	std::string html = "<?xml version='1.0' encoding='utf-8'?>\n<html xmlns=\"http://www.w3.org/1999/xhtml\">\n<head>\n<title></title>\n<link rel=\"stylesheet\" type=\"text/css\" href=\"stylesheet.css\"/>\n</head>\n<body>\n";
 	html.insert(97, htmlbodyescape(book.name));

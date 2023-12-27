@@ -29,14 +29,13 @@ std::string escape(std::string in) {
 
 int main(int argc, char* argv[]) {
 	if (argc != 2) {
-		std::cout << "usage: wn-epuber <url to webnovel read page>\n";
+		std::cout << "Usage: wn-epuber <url to the 1st chapter to be downloade from webnovel>\n";
 		return 0;
 	}
 
 	std::cout << "Downloading " << argv[1] << '\n';
-	std::string url = argv[1];
 	std::string html = "";
-	if (http_get(url, &html) != 0) return -1;
+	if (http_get(argv[1], &html) != 0) return -1;
 
 	// parse book
 	int counter = 0;
@@ -61,9 +60,8 @@ top:
 			bfjson::findSingleElement(bkInfo, "categoryName")
 		};
 	}
-	// chapterInfo
-	std::string chapInfo = bfjson::findSingleJSONObject(json, "chapterInfo");
 	// current chapter
+	std::string chapInfo = bfjson::findSingleJSONObject(json, "chapterInfo");
 	std::string curChapterId = bfjson::findSingleElement(chapInfo, "chapterId");
 	std::string curChapterName = unescape(bfjson::findSingleElement(chapInfo, "chapterName"));
 	std::string contents_s = bfjson::findSingleArray(json, "contents");
@@ -71,7 +69,6 @@ top:
 	std::vector<std::string> lines;
 	for (size_t i = 0; i < contents.size(); i++) {
 		std::string text = unescape(bfjson::findSingleElement(contents[i], "content"));
-		// std::cout << text << '\n';
 		lines.push_back(text);
 	}
 	chapterInfo curChapter = { unescape(curChapterName), curChapterId, unescape(curChapterId) + ".html", lines };
@@ -79,7 +76,9 @@ top:
 	chapters.push_back(curChapter); counter++;
 	// next chapter
 	std::string nextChapterId = bfjson::findSingleElement(chapInfo, "nextChapterId");
-	if (nextChapterId != "-1") {
+	if (nextChapterId == "") { // GG but webnovel paywall
+		std::cout << "\nHit WebNovel paywall. Downloaded " << counter << " chapters.\n";
+	} else if (nextChapterId != "-1") {
 		std::string nextChapterName = unescape(bfjson::findSingleElement(chapInfo, "nextChapterName"));
 		// https://www.webnovel.com/book/a-mistake-i-made-got-me-a-girlfriend-(girlxgirl)_14108808705366405/chapter-1-next-morning_39190231278213964
 		std::string nextUrl = "https://www.webnovel.com/book/" + escape(book.name) + '_' + book.id + '/' + escape(nextChapterName) + '_' + nextChapterId;
@@ -87,7 +86,7 @@ top:
 		html.clear();
 		if (http_get(nextUrl, &html) != 0) return -1;
 		goto top;
-	} // else == done
+	} // else = done
 
 	// download cover
 	std::cout << "\nDownloading cover.\n";
@@ -95,9 +94,6 @@ top:
 	// https://book-pic.webnovel.com/bookcover/13911677005221505
 	std::string cover_url = "book-pic.webnovel.com/bookcover/" + book.id;
 	http_get(cover_url, &cover_raw);
-	std::ofstream cover_f("cover.jpg", std::ios::binary);
-	cover_f.write((char*)&cover_raw[0], cover_raw.size());
-	cover_f.close();
 	// find cover image dimensions
 	size_t im_loc = html.find(cover_url) - 71;
 	std::string im_json = html.substr(im_loc, html.find("}", im_loc) - im_loc + 1);
@@ -106,11 +102,9 @@ top:
 
 	std::cout << "Parsed " << counter << " chapters.\nCreating EPUB...\n";
 
-	epubcss();
-	epubmeta(book, chapters);
-	epubroll(escape(book.name), chapters);
+	epubroll(escape(book.name), chapters, cover_raw, epubmeta(book, chapters));
 
-	std::cout << "Finished.\n";
+	std::cout << "Finished creating " << escape(book.name) << ".epub\n";
 
 	return 0;
 }
