@@ -1,8 +1,6 @@
 # cpp-wn-epuber
-Download WebNovels into EPUB format
+Download WebNovels into EPUB format. Doesn't download paid chapters.
 
-TODO: 
-- create epub files on the fly in memory, to be zipped in memory. removes need to create temp directory 
-- add more metadata fields into content.opf
-- no embedded image support yet
-- no bold/italics support
+# Build
+Should build on anything that supports boost. Tested on Visual Studio 2019 on Windows 10.
+Need libzip, boost, openssl. For Windows, link Rpcrt4.lib.
