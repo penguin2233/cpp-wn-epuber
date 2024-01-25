@@ -21,7 +21,7 @@ std::string escape(std::string in) {
 	std::string p = in;
 	for (size_t h = 0; h < p.size(); h++) {
 		if (p[h] == ' ') p.replace(h, 1, 1, '-');
-		else if (64 < p[h] && p[h] < 91) p[h] = std::tolower(p[h]);
+		else if (64 < p[h] && p[h] < 91) p[h] = p[h] + 32;
 		else if (p[h] == ':' || p[h] == '?') { p.erase(h, 1); h--; }
 	}
 	return p;
@@ -52,13 +52,11 @@ top:
 	// bookInfo
 	if (counter == 0) {
 		std::string bkInfo = bfjson::findSingleJSONObject(json, "bookInfo");
-		book = {
-			unescape(bfjson::findSingleElement(bkInfo, "bookName")),
-			bfjson::findSingleElement(bkInfo, "bookId"),
-			unescape(bfjson::findSingleElement(bkInfo, "authorName")),
-			bfjson::findSingleElement(bkInfo, "languageName"),
-			bfjson::findSingleElement(bkInfo, "categoryName")
-		};
+		book.name = unescape(bfjson::findSingleElement(bkInfo, "bookName"));
+		book.id = bfjson::findSingleElement(bkInfo, "bookId");
+		book.author = unescape(bfjson::findSingleElement(bkInfo, "authorName"));
+		book.language = bfjson::findSingleElement(bkInfo, "languageName");
+		book.genre = bfjson::findSingleElement(bkInfo, "categoryName");
 	}
 	// current chapter
 	std::string chapInfo = bfjson::findSingleJSONObject(json, "chapterInfo");

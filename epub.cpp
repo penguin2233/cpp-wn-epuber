@@ -129,7 +129,7 @@ epubmetadata epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	time_t curtime = time(NULL);
 	char* timestr = new char[33];
 	// std::strftime(timestr, 33, "%FT%TZ", std::gmtime(&curtime));
-#if (defined(_MSC_VER) && _MSC_VER >= 1900)
+#if (defined(_MSC_VER) && _MSC_VER >= 1500)
 	tm tmtime;
 	gmtime_s(&tmtime, &curtime);
 	std::strftime(timestr, 33, "%Y-%m-%d", &tmtime);
@@ -149,7 +149,7 @@ epubmetadata epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	StringFromGUID2((GUID)uuid, uuidstr_ww, 39);
 	std::wstring uuidstr_w = uuidstr_ww;
 	uuidstr = std::string(uuidstr_w.begin(), uuidstr_w.end());
-	uuidstr.erase(0, 1); uuidstr.pop_back(); // remove { and }
+	uuidstr.erase(0, 1); uuidstr.erase(uuidstr.end() - 1); // remove { and }
 #else
 	#warning "no uuid gen, using c593ed25-1fa6-4180-9bb2-3379680b6913"
 	uuidstr = "c593ed25-1fa6-4180-9bb2-3379680b6913";
@@ -190,7 +190,8 @@ epubmetadata epubmeta(bookInfo book, std::vector<chapterInfo> chapters) {
 	titlepagexhtml.insert(583, book.cv_height);
 	titlepagexhtml.insert(582, book.cv_width);
 
-	return epubmetadata{ contentopf, tocncx, titlepagexhtml };
+	epubmetadata meta = { contentopf, tocncx, titlepagexhtml };
+	return meta;
 }
 
 std::string epubhtml(bookInfo book, chapterInfo chapter) {
